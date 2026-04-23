@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Articles;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use App\Models\User;
 
 class ArticlesController extends Controller
 {
@@ -29,8 +31,8 @@ class ArticlesController extends Controller
      */
     public function store(Request $request)
     {
-       $request->validate([
-            'title' => 'required',
+        $request->validate([
+            'title' => 'required|string|max:255',
             'content' => 'required',
             'category' => 'required',
             'image' => 'required|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
@@ -38,18 +40,18 @@ class ArticlesController extends Controller
 
         $imageName = $request->picture->store("articles");
 
+
         Articles::create([
             'user_id' => auth()->id(),
             'title' => $request->title,
             'content' => $request->content,
-            'slug' => str_slug($request->title),
+            'slug' => Str::slug($request->title),
             'category' => $request->category,
             'image' => $imageName,
         ]);
 
         return redirect()->route('articles.index')
-                        ->with('success','Article created successfully.');
-
+            ->with('success', 'Article created successfully.');
     }
 
     /**
@@ -57,7 +59,7 @@ class ArticlesController extends Controller
      */
     public function show(Articles $articles)
     {
-        //
+        return view('articles.show', compact("articles"));
     }
 
     /**
@@ -65,7 +67,7 @@ class ArticlesController extends Controller
      */
     public function edit(Articles $articles)
     {
-        //
+        return view('articles.edit', compact('articles'));
     }
 
     /**
@@ -73,7 +75,40 @@ class ArticlesController extends Controller
      */
     public function update(Request $request, Articles $articles)
     {
-        //
+        $val = [
+            'title' => 'bail|required|string|max:255',
+            'content' => 'bail|required',
+        ];
+
+
+        // Si une nouvelle image est envoyée
+        if ($request->has('image')) {
+            $val['image'] = 'bail|required|image|max:1024';
+        }
+
+        $request->validate($val);
+
+
+        if ($request->has('image')) {
+            $data = User::find($request->id);
+            $image_path = public_path() . '/' . $data->filename;
+            unlink($image_path);
+            $data->delete();
+        }
+
+
+        $imageName = $request->image->store("articles");
+        $slug = $request->slug;
+
+        $articles->update([
+            'title' => $request->title,
+            'content' => $request->content,
+            'image' =>isset($imageName) ? $imageName : $articles->image,
+            'slug' => $slug,
+            'category' => $request->category,
+        ]);
+
+        return redirect(route('articles.show', $articles));
     }
 
     /**
@@ -81,6 +116,11 @@ class ArticlesController extends Controller
      */
     public function destroy(Articles $articles)
     {
-        //
+        $data = Articles::find($articles->id);
+        $data->delete($articles->image);
+
+        $articles->delete();
+
+        return redirect(route('articles.index'));
     }
 }
